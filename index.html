@@ -628,6 +628,7 @@
       savedKeys: [],
       savedModels: [...DEFAULT_MODELS],
       summaryResult: null,
+      lastShelfRef: null,
       fontSize: 'text-base',
       darkMode: false,
       advisor: {
@@ -1102,19 +1103,64 @@ ${contentBlock}
       }
     }
 
+    function formatSummaryText(s) {
+      if (!s || typeof s !== 'object') return '';
+      const eventsArr = Array.isArray(s.events) ? s.events : (s.events ? [s.events] : []);
+      const dialoguesArr = Array.isArray(s.dialogues) ? s.dialogues : (s.dialogues ? [s.dialogues] : []);
+      return [
+        `📖 ${s.title || 'สรุปเนื้อหาตอน'}`,
+        s.overview ? `\n📝 เรื่องย่อ:\n${s.overview}` : '',
+        eventsArr.length ? `\n📌 เหตุการณ์สำคัญ:\n` + eventsArr.map((e, i) => `${i + 1}. ${e}`).join('\n') : '',
+        dialoguesArr.length ? `\n💬 ไดอะล็อกเด่น:\n` + dialoguesArr.map(d => `- ${d}`).join('\n') : '',
+        s.emotions ? `\n🎭 อารมณ์ & บรรยากาศ:\n${s.emotions}` : ''
+      ].filter(Boolean).join('\n').trim();
+    }
+
     function copySummaryText() {
       const s = state.summaryResult;
       if (!s) return;
-      const lines = [
-        `📖 ${s.title || 'สรุปเนื้อหาตอน'}`,
-        `\n📝 เรื่องย่อ:\n${s.overview || ''}`,
-        Array.isArray(s.events) && s.events.length ? `\n📌 เหตุการณ์สำคัญ:\n` + s.events.map((e, i) => `${i + 1}. ${e}`).join('\n') : '',
-        Array.isArray(s.dialogues) && s.dialogues.length ? `\n💬 ไดอะล็อกเด่น:\n` + s.dialogues.map(d => `- ${d}`).join('\n') : '',
-        s.emotions ? `\n🎭 อารมณ์ & บรรยากาศ:\n${s.emotions}` : ''
-      ].filter(Boolean).join('\n');
-
+      const lines = formatSummaryText(s);
       navigator.clipboard.writeText(lines).then(() => {
         showToast('คัดลอกสรุปตอนนี้แล้ว 📋');
+      });
+    }
+
+    function sendSummaryToPeachzShelf() {
+      const s = state.summaryResult;
+      const text = formatSummaryText(s);
+      if (!s || !text) {
+        showToast('ยังไม่มีสรุปจากพี่ตูบให้ส่งครับ');
+        return;
+      }
+      const ref = (state && state.lastShelfRef) || {};
+      try {
+        localStorage.setItem('peachz_suite_handoff_v1', JSON.stringify({
+          target: 'peachz-shelf',
+          kind: 'chapter_note',
+          sourceApp: 'น้องหมาช่วยแปลนิยาย (สรุปจากพี่ตูบ)',
+          novelId: String(ref.novelId || ''),
+          chapterId: String(ref.chapterId || ''),
+          novelTitle: String(ref.novelTitle || ''),
+          chapterOrder: ref.chapterOrder ?? null,
+          title: String(s.title || ref.chapterTitle || 'สรุปจากพี่ตูบ').trim(),
+          content: text,
+          createdAt: Date.now()
+        }));
+      } catch (err) {
+        console.error('sendSummaryToPeachzShelf failed:', err);
+        showToast('บันทึกข้อมูลส่งต่อไม่สำเร็จ กรุณากดคัดลอกแทนครับ');
+        return;
+      }
+      dispatchSuiteHandoff('peachz-shelf', 'https://dblack-dev.github.io/peachz-shelf/?handoff=1', 'peachz_shelf_tab', (status) => {
+        if (status === 'focused') {
+          showToast('📚 ส่งสรุปกลับ Peachz Shelf แล้ว · สลับไปแท็บเดิมให้แล้ว ✨');
+        } else if (status === 'already_open') {
+          showToast('📚 ส่งสรุปกลับแท็บ Peachz Shelf ที่เปิดอยู่แล้ว (ไม่เปิดแท็บซ้ำ) · คลิกสลับแท็บไปกดบันทึกได้เลย 🔔');
+        } else if (status === 'blocked') {
+          showToast('📚 เตรียมสรุปแล้ว · คลิกสลับไปแท็บ Peachz Shelf หรือเปิดจากเมนูแอป 🍑');
+        } else {
+          showToast('📚 ส่งสรุปกลับ Peachz Shelf แล้ว');
+        }
       });
     }
 
@@ -1140,7 +1186,8 @@ ${contentBlock}
                 สรุปจากพี่ตูบ: <span class="text-amber-700 dark:text-amber-300">${escapeHtml(res.title || 'เรื่องย่อตอนนี้')}</span>
               </h3>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="btnSendSummaryToShelf" type="button" onclick="sendSummaryToPeachzShelf()" class="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium transition" title="ส่งสรุปนี้กลับไปเก็บใน เรื่องย่อ / ข้อมูลประจำตอน ของ Peachz Shelf">📚 ส่งเก็บเข้า Shelf</button>
               <button onclick="copySummaryText()" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium transition">📋 คัดลอกสรุป</button>
               <button onclick="clearSummaryResult()" class="text-xs text-stone-400 hover:text-rose-500 px-2 py-0.5 rounded">✕ ปิด</button>
             </div>
@@ -3238,6 +3285,16 @@ ${prevAdvisorInfo}${nextPara}${historyText}
         aiEl.value = String(payload.translatedText || payload.content || '');
       }
 
+      state.lastShelfRef = (payload.shelfNovelId || payload.shelfNovelTitle || payload.shelfChapterId || payload.shelfChapterOrder)
+        ? {
+            novelId: String(payload.shelfNovelId || ''),
+            chapterId: String(payload.shelfChapterId || ''),
+            novelTitle: String(payload.shelfNovelTitle || payload.novelTitle || ''),
+            chapterOrder: payload.shelfChapterOrder ?? payload.chapterOrder ?? null,
+            chapterTitle: String(payload.shelfChapterTitle || payload.title || '')
+          }
+        : null;
+
       if (typeof updateLiveInputStats === 'function') updateLiveInputStats();
       if (typeof saveState === 'function') saveState();
       dismissPomeIncomingHandoff();
@@ -3469,7 +3526,8 @@ ${prevAdvisorInfo}${nextPara}${historyText}
         ...state,
         rawSource: '', rawAI1: '', rawAI2: '', rawAI3: '',
         paragraphs: [],
-        summaryResult: null
+        summaryResult: null,
+        lastShelfRef: null
       };
       document.getElementById('rawSource').value = '';
       document.getElementById('rawAI1').value = '';
