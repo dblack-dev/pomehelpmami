@@ -285,6 +285,33 @@
 
   <main class="w-full px-2 sm:px-3 py-3 flex-1 flex flex-col gap-5">
 
+    <!-- Cross-App Handoff Receive Banner (from NovelTrans Studio) -->
+    <div id="pomeHandoffBanner" class="hidden dm-card rounded-2xl border-2 border-amber-400 dark:border-amber-500 bg-amber-50/90 dark:bg-amber-950/50 px-4 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shadow-sm">
+      <div class="min-w-0 space-y-0.5">
+        <div class="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+          <span>📖</span>
+          <span>ได้รับต้นฉบับ + คำแปลส่งตรงมาจาก NovelTrans Studio</span>
+        </div>
+        <div id="pomeHandoffMeta" class="text-xs dm-muted truncate font-medium"></div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 shrink-0">
+        <label class="inline-flex items-center gap-1.5 text-xs dm-muted">
+          <span>วางคำแปลในช่อง:</span>
+          <select id="selectPomeHandoffSlot" class="dm-select px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-amber-300 dark:border-slate-600 text-xs font-semibold">
+            <option value="2">Novel Trans (ช่อง 2)</option>
+          </select>
+        </label>
+        <button id="btnPomeAcceptHandoff" type="button" onclick="acceptPomeIncomingHandoff()"
+          class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold shadow-sm transition">
+          📥 วางลงต้นฉบับ + ช่องที่เลือก
+        </button>
+        <button id="btnPomeDismissHandoff" type="button" onclick="dismissPomeIncomingHandoff()"
+          class="px-2.5 py-1.5 rounded-xl dm-muted hover:bg-stone-200/70 dark:hover:bg-slate-700 text-xs transition">
+          ปิด
+        </button>
+      </div>
+    </div>
+
     <!-- Input Setup Panel -->
     <section id="inputPanel" class="dm-card bg-[#fffdf9] rounded-2xl shadow-sm border border-amber-200/80 p-3.5 lg:p-4 transition-all">
       <div class="flex flex-wrap justify-between items-center mb-3 gap-2">
@@ -673,6 +700,24 @@
         renderWorkspace();
       } else {
         renderEmptyState();
+      }
+      checkPomeIncomingHandoff();
+    });
+
+    const onPomeFocusOrVisible = () => {
+      if (!document.hidden && typeof setSuiteTitleBadge === 'function') setSuiteTitleBadge(false);
+      if (typeof checkPomeIncomingHandoff === 'function') checkPomeIncomingHandoff();
+    };
+    window.addEventListener('focus', onPomeFocusOrVisible);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) onPomeFocusOrVisible();
+    });
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'peachz_suite_handoff_v1' && typeof checkPomeIncomingHandoff === 'function') {
+        checkPomeIncomingHandoff();
+        if (document.hidden && typeof readPomeIncomingHandoff === 'function' && readPomeIncomingHandoff() && typeof setSuiteTitleBadge === 'function') {
+          setSuiteTitleBadge(true);
+        }
       }
     });
 
@@ -3011,6 +3056,196 @@ ${prevAdvisorInfo}${nextPara}${historyText}
       });
     }
 
+    const PEACHZ_SUITE_APP_ID = 'pomehelpmami';
+    const PEACHZ_TITLE_BADGE = '🔔 มีงานใหม่! · ';
+    const PEACHZ_TAB_ID = Math.random().toString(36).slice(2) + '_' + Date.now();
+    const peachzSuiteBus = typeof BroadcastChannel === 'function' ? new BroadcastChannel('peachz_suite_bus_v1') : null;
+
+    function setSuiteTitleBadge(hasPending) {
+      const cur = String(document.title || '');
+      if (hasPending) {
+        if (document.hidden && !cur.startsWith(PEACHZ_TITLE_BADGE)) {
+          document.title = PEACHZ_TITLE_BADGE + cur;
+        }
+      } else if (cur.startsWith(PEACHZ_TITLE_BADGE)) {
+        document.title = cur.slice(PEACHZ_TITLE_BADGE.length);
+      }
+    }
+
+    function dispatchSuiteHandoff(targetApp, url, windowName, onDone) {
+      try {
+        peachzSuiteBus?.postMessage({ type: 'handoff', targetApp, ts: Date.now() });
+      } catch (e) {}
+
+      const refs = (window.__peachzTabRefs = window.__peachzTabRefs || {});
+      const cached = refs[targetApp];
+      let sameSuiteTab = false;
+      if (cached && !cached.closed) {
+        try {
+          sameSuiteTab = cached.location && cached.location.origin === window.location.origin && cached.location.pathname.includes('/' + targetApp);
+        } catch (e) {
+          sameSuiteTab = false;
+        }
+      }
+      if (sameSuiteTab) {
+        try { cached.focus(); } catch (e) {}
+        if (typeof onDone === 'function') onDone('focused');
+        return Promise.resolve({ reused: true, focused: true });
+      }
+
+      return new Promise((resolve) => {
+        if (!peachzSuiteBus) {
+          const w = window.open(url, windowName || ('peachz_' + targetApp + '_tab'));
+          if (w) refs[targetApp] = w;
+          if (typeof onDone === 'function') onDone(w ? 'opened' : 'blocked');
+          resolve({ reused: false, focused: !!w });
+          return;
+        }
+
+        const reqId = PEACHZ_TAB_ID + '_' + Math.random().toString(36).slice(2);
+        let settled = false;
+        let timer = null;
+
+        const finishOpen = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          peachzSuiteBus.removeEventListener('message', onPong);
+          const w = window.open(url, windowName || ('peachz_' + targetApp + '_tab'));
+          if (w) refs[targetApp] = w;
+          if (typeof onDone === 'function') onDone(w ? 'opened' : 'blocked');
+          resolve({ reused: false, focused: !!w });
+        };
+
+        const onPong = (ev) => {
+          const d = ev && ev.data;
+          if (!d || d.type !== 'pong' || d.targetApp !== targetApp || d.reqId !== reqId) return;
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          peachzSuiteBus.removeEventListener('message', onPong);
+          try { peachzSuiteBus.postMessage({ type: 'handoff', targetApp, ts: Date.now() }); } catch (e) {}
+          if (typeof onDone === 'function') onDone('already_open');
+          resolve({ reused: true, focused: false });
+        };
+
+        peachzSuiteBus.addEventListener('message', onPong);
+        timer = setTimeout(finishOpen, 90);
+        try {
+          peachzSuiteBus.postMessage({ type: 'ping', targetApp, reqId });
+        } catch (e) {
+          finishOpen();
+        }
+      });
+    }
+
+    if (peachzSuiteBus) {
+      peachzSuiteBus.addEventListener('message', (ev) => {
+        const d = ev && ev.data;
+        if (!d || d.targetApp !== PEACHZ_SUITE_APP_ID) return;
+        if (d.type === 'ping') {
+          try {
+            peachzSuiteBus.postMessage({ type: 'pong', targetApp: PEACHZ_SUITE_APP_ID, reqId: d.reqId, senderTabId: PEACHZ_TAB_ID });
+          } catch (e) {}
+        } else if (d.type === 'handoff') {
+          checkPomeIncomingHandoff();
+          if (document.hidden && readPomeIncomingHandoff()) {
+            setSuiteTitleBadge(true);
+          }
+        }
+      });
+    }
+
+    function readPomeIncomingHandoff() {
+      try {
+        const raw = localStorage.getItem('peachz_suite_handoff_v1');
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        const hasAnyText = Boolean((parsed?.originalText && String(parsed.originalText).trim()) || (parsed?.translatedText && String(parsed.translatedText).trim()) || (parsed?.content && String(parsed.content).trim()));
+        if (!parsed || parsed.target !== 'pomehelpmami' || !hasAnyText) {
+          return null;
+        }
+        return parsed;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function checkPomeIncomingHandoff() {
+      const banner = document.getElementById('pomeHandoffBanner');
+      const meta = document.getElementById('pomeHandoffMeta');
+      const sel = document.getElementById('selectPomeHandoffSlot');
+      if (!banner || !meta || !sel) return;
+
+      const payload = readPomeIncomingHandoff();
+      if (!payload) {
+        banner.classList.add('hidden');
+        setSuiteTitleBadge(false);
+        return;
+      }
+
+      const slotNames = [
+        { slot: '1', name: String(document.getElementById('nameAI1')?.value || state.ai1Name || 'AI 1').trim() },
+        { slot: '2', name: String(document.getElementById('nameAI2')?.value || state.ai2Name || 'AI 2').trim() },
+        { slot: '3', name: String(document.getElementById('nameAI3')?.value || state.ai3Name || 'AI 3').trim() }
+      ];
+      sel.innerHTML = '';
+      let matchedSlot = '';
+      const prefLower = String(payload.preferredSlotName || 'novel trans').toLowerCase();
+      slotNames.forEach((s) => {
+        const opt = document.createElement('option');
+        opt.value = s.slot;
+        opt.textContent = `ช่อง ${s.slot}: ${s.name}`;
+        sel.appendChild(opt);
+        if (!matchedSlot && (s.name.toLowerCase().includes('novel') || s.name.toLowerCase() === prefLower)) {
+          matchedSlot = s.slot;
+        }
+      });
+      sel.value = matchedSlot || '2';
+
+      const origLen = String(payload.originalText || '').length.toLocaleString('th-TH');
+      const transLen = String(payload.translatedText || payload.content || '').length.toLocaleString('th-TH');
+      meta.textContent = `${payload.title || 'งานแปลจาก NovelTrans Studio'} • ต้นฉบับ ${origLen} ตัวอักษร • คำแปล ${transLen} ตัวอักษร`;
+      banner.classList.remove('hidden');
+    }
+
+    function dismissPomeIncomingHandoff() {
+      try {
+        const p = readPomeIncomingHandoff();
+        if (p) localStorage.removeItem('peachz_suite_handoff_v1');
+      } catch (e) {}
+      document.getElementById('pomeHandoffBanner')?.classList.add('hidden');
+      setSuiteTitleBadge(false);
+    }
+
+    function acceptPomeIncomingHandoff() {
+      const payload = readPomeIncomingHandoff();
+      if (!payload) {
+        checkPomeIncomingHandoff();
+        return;
+      }
+
+      const slot = document.getElementById('selectPomeHandoffSlot')?.value || '2';
+      const origEl = document.getElementById('rawSource');
+      const aiEl = document.getElementById(`rawAI${slot}`);
+
+      document.getElementById('inputPanel')?.classList.remove('hidden');
+
+      if (origEl && payload.originalText !== undefined) {
+        origEl.value = String(payload.originalText || '');
+      }
+      if (aiEl) {
+        aiEl.value = String(payload.translatedText || payload.content || '');
+      }
+
+      if (typeof updateLiveInputStats === 'function') updateLiveInputStats();
+      if (typeof saveState === 'function') saveState();
+      dismissPomeIncomingHandoff();
+
+      const slotLabel = String(document.getElementById(`nameAI${slot}`)?.value || `ช่อง ${slot}`).trim();
+      showToast(`วางต้นฉบับ + คำแปลลงช่อง "${slotLabel}" เรียบร้อยแล้ว โฮ่ง! 🐶✨`);
+    }
+
     function sendFinalToPeachzHaus() {
       const text = getCompiledFinalText();
       if (!text || !text.trim()) {
@@ -3030,8 +3265,17 @@ ${prevAdvisorInfo}${nextPara}${historyText}
         showToast('บันทึกข้อมูลส่งต่อไม่สำเร็จ กรุณาลองคัดลอกแทนครับ');
         return;
       }
-      window.open('https://dblack-dev.github.io/peachz-pwa/?handoff=1', '_blank', 'noopener');
-      showToast('ส่งข้อความไป Peachz Haus Studio แล้ว 🍑');
+      dispatchSuiteHandoff('peachz-pwa', 'https://dblack-dev.github.io/peachz-pwa/?handoff=1', 'peachz_pwa_tab', (status) => {
+        if (status === 'focused') {
+          showToast('ส่งข้อความไป Peachz Haus Studio แล้ว · สลับไปแท็บที่เปิดค้างไว้ให้แล้ว ✨');
+        } else if (status === 'already_open') {
+          showToast('ส่งข้อความไปแท็บ Peachz Haus ที่เปิดอยู่แล้ว (ไม่เปิดแท็บซ้ำ) · คลิกสลับแท็บไปดูได้เลย 🔔');
+        } else if (status === 'blocked') {
+          showToast('เตรียมข้อมูลส่งแล้ว · คลิกสลับไปแท็บ Peachz Haus Studio เพื่อรับได้เลย');
+        } else {
+          showToast('ส่งข้อความไป Peachz Haus Studio แล้ว 🍑');
+        }
+      });
     }
 
     function copyFinalText() {
@@ -3289,6 +3533,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
           } else {
             renderEmptyState();
           }
+          if (typeof checkPomeIncomingHandoff === 'function') checkPomeIncomingHandoff();
           return true;
         } catch (e) {
           console.warn('pomeCloudBridge applyRemoteState failed:', e);
