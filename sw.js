@@ -3,7 +3,7 @@
  * - CDN (Tailwind / Google Fonts): stale-while-revalidate
  * - Firebase / Google Auth / Firestore / Gemini APIs: ผ่านเน็ตตรง ๆ ไม่แคช
  */
-const VERSION = 'v1.1.1';
+const VERSION = 'v1.1.2';
 const SHELL_CACHE = `pomehelpmami-shell-${VERSION}`;
 const RUNTIME_CACHE = `pomehelpmami-runtime-${VERSION}`;
 
