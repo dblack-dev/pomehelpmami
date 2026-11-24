@@ -2993,6 +2993,12 @@ ${prevAdvisorInfo}${nextPara}${historyText}
       const btn = document.getElementById('btnPeachzSuiteMenu');
       if (!dd) return;
       const willOpen = dd.classList.contains('hidden');
+      if (willOpen && btn) {
+        const rect = btn.getBoundingClientRect();
+        const alignLeft = rect.right < 260;
+        dd.classList.toggle('left-0', alignLeft);
+        dd.classList.toggle('right-0', !alignLeft);
+      }
       dd.classList.toggle('hidden', !willOpen);
       if (btn) btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
     }
