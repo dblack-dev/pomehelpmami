@@ -3933,6 +3933,180 @@ ${prevAdvisorInfo}${nextPara}${historyText}
         userDropdown.classList.add('hidden');
         notify('ออกจากระบบเรียบร้อยแล้ว');
       });
+
+      (function installPeachzGeminiTelemetry() {
+        if (window.__peachzGeminiTelemetryInstalled) return;
+        window.__peachzGeminiTelemetryInstalled = true;
+        const STORAGE_KEY = 'peachz_gemini_usage_v1';
+        const BUS_NAME = 'peachz_suite_bus_v1';
+        const MAX_EVENTS = 2000;
+        const APP_ID = 'pomehelpmami';
+        let pushTimer = null;
+
+        function hashKeyId(raw) {
+          const s = String(raw || '');
+          if (!s) return 'unknown';
+          let h = 2166136261;
+          for (let i = 0; i < s.length; i++) {
+            h ^= s.charCodeAt(i);
+            h = Math.imul(h, 16777619);
+          }
+          return 'k_' + (h >>> 0).toString(36);
+        }
+
+        function resolveKeyLabel(apiKey) {
+          try {
+            const snap = window.pomeCloudBridge?.getStateSnapshot?.();
+            const st = snap?.stateJson ? JSON.parse(snap.stateJson) : (typeof state !== 'undefined' ? state : null);
+            const found = Array.isArray(st?.savedKeys) ? st.savedKeys.find((k) => k && k.key === apiKey) : null;
+            return String(found?.name || found?.label || '').trim();
+          } catch (e) {
+            return '';
+          }
+        }
+
+        function mergeEvents(a, b) {
+          const map = new Map();
+          [...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])].forEach((ev) => {
+            if (ev && ev.id) map.set(ev.id, ev);
+          });
+          return Array.from(map.values())
+            .sort((x, y) => Number(y.ts || 0) - Number(x.ts || 0))
+            .slice(0, MAX_EVENTS);
+        }
+
+        function readLocalEvents() {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+            return Array.isArray(parsed?.events) ? parsed.events : [];
+          } catch (e) {
+            return [];
+          }
+        }
+
+        function writeLocalEvents(events) {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, events }));
+          } catch (e) {}
+        }
+
+        function broadcastUsage(ts) {
+          try {
+            if (typeof BroadcastChannel === 'function') {
+              const bc = new BroadcastChannel(BUS_NAME);
+              bc.postMessage({ type: 'gemini_usage_updated', app: APP_ID, ts });
+              bc.close();
+            }
+          } catch (e) {}
+        }
+
+        function scheduleCloudPush() {
+          clearTimeout(pushTimer);
+          pushTimer = setTimeout(async () => {
+            const user = activeUser || auth?.currentUser || null;
+            if (!user || !db) return;
+            try {
+              const ref = doc(db, 'users', user.uid, 'sync', 'peachzGeminiUsage');
+              const snap = await getDoc(ref);
+              let remoteEvents = [];
+              if (snap.exists()) {
+                const parsed = JSON.parse(snap.data()?.stateJson || 'null');
+                if (Array.isArray(parsed?.events)) remoteEvents = parsed.events;
+              }
+              const merged = mergeEvents(readLocalEvents(), remoteEvents);
+              writeLocalEvents(merged);
+              const now = Date.now();
+              await setDoc(ref, {
+                stateJson: JSON.stringify({ version: 1, events: merged }),
+                updatedAt: now,
+                updatedBy: APP_ID
+              });
+              broadcastUsage(now);
+            } catch (e) {
+              console.warn('Gemini usage cloud sync skipped:', e?.message || e);
+            }
+          }, 400);
+        }
+
+        async function recordUsageFromFetch(model, apiKey, res) {
+          let inTok = 0;
+          let outTok = 0;
+          let thinkTok = 0;
+          const ok = Boolean(res && res.ok);
+          try {
+            if (res && typeof res.clone === 'function') {
+              const txt = await res.clone().text();
+              let meta = null;
+              try {
+                const obj = JSON.parse(txt);
+                meta = obj?.usageMetadata || null;
+              } catch (e) {
+                const matches = txt.match(/"usageMetadata"\s*:\s*\{[^}]+\}/g);
+                if (matches && matches.length) {
+                  try {
+                    meta = JSON.parse('{' + matches[matches.length - 1] + '}').usageMetadata || null;
+                  } catch (e2) {}
+                }
+              }
+              if (meta) {
+                inTok = Math.max(0, Number(meta.promptTokenCount || 0));
+                thinkTok = Math.max(0, Number(meta.thoughtsTokenCount || 0));
+                outTok = Math.max(0, Number(meta.candidatesTokenCount || 0) + thinkTok);
+              }
+            }
+          } catch (e) {}
+
+          const ts = Date.now();
+          const ev = {
+            id: `${APP_ID}_${ts}_${Math.random().toString(36).slice(2, 8)}`,
+            ts,
+            app: APP_ID,
+            keyId: hashKeyId(apiKey),
+            keyTail: apiKey ? String(apiKey).slice(-4) : '----',
+            keyLabel: resolveKeyLabel(apiKey),
+            model: String(model || 'unknown'),
+            inTok,
+            outTok,
+            thinkTok,
+            ok
+          };
+          const merged = mergeEvents([ev], readLocalEvents());
+          writeLocalEvents(merged);
+          broadcastUsage(ts);
+          scheduleCloudPush();
+        }
+
+        const origFetch = window.fetch.bind(window);
+        window.fetch = function (input, init) {
+          const urlStr = typeof input === 'string' ? input : String(input?.url || '');
+          const method = String(init?.method || (typeof input === 'object' && input?.method) || 'GET').toUpperCase();
+          const m = method === 'POST'
+            ? urlStr.match(/^https:\/\/generativelanguage\.googleapis\.com\/v\d+(?:beta)?\/models\/([^:/?]+):(generateContent|streamGenerateContent)(?:[?#]|$)/i)
+            : null;
+          if (!m) return origFetch(input, init);
+
+          let apiKey = '';
+          try {
+            apiKey = new URL(urlStr).searchParams.get('key') || '';
+          } catch (e) {}
+          if (!apiKey) {
+            try {
+              if (init?.headers && typeof init.headers.get === 'function') {
+                apiKey = init.headers.get('x-goog-api-key') || '';
+              } else if (init?.headers && typeof init.headers === 'object') {
+                apiKey = init.headers['x-goog-api-key'] || init.headers['X-Goog-Api-Key'] || '';
+              } else if (typeof input === 'object' && input?.headers?.get) {
+                apiKey = input.headers.get('x-goog-api-key') || '';
+              }
+            } catch (e) {}
+          }
+          const model = decodeURIComponent(m[1] || 'unknown');
+          return origFetch(input, init).then((res) => {
+            recordUsageFromFetch(model, apiKey, res);
+            return res;
+          });
+        };
+      })();
     } catch (err) {
       console.warn('Firebase init skipped:', err);
       setOwnerGateState({ locked: true, loading: false, showWarning: '⚠️ ไม่สามารถเริ่มระบบยืนยันตัวตนได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้า' });
