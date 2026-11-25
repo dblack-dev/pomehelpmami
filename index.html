@@ -348,6 +348,7 @@
             <span class="text-xs font-bold text-amber-600 dark:text-amber-400 shrink-0">🐶 ชื่อ:</span>
             <input type="text" id="nameAI1" oninput="updateAIName(1, this.value)" placeholder="เช่น Claude" class="dm-input w-full px-2.5 py-1 text-sm font-semibold text-amber-800 dark:text-amber-300 bg-amber-50/70 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none">
           </div>
+          <button id="btnSendAI1ToPeachzHaus" type="button" onclick="sendSlotToPeachzHaus(1)" title="ส่งคำแปลในช่องนี้ตรงไปจัดหน้าใน Peachz Haus Studio ทันที" class="w-full mb-1.5 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/40 dark:hover:bg-rose-800/60 border border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-200 text-xs font-semibold transition flex items-center justify-center gap-1">🍑 ส่งไปจัดหน้า</button>
           <textarea id="rawAI1" oninput="updateLiveInputStats()" rows="26" placeholder="วางคำแปลจาก AI ตัวที่ 1 ที่นี่..." class="dm-input w-full p-3 text-sm leading-relaxed border border-amber-300 bg-amber-50/25 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-y h-[62vh] min-h-[500px]"></textarea>
           <div id="stat-ai1" class="text-[11px] dm-muted text-stone-400 mt-1 px-1">0 ย่อหน้า • 0 ตัวอักษร</div>
         </div>
@@ -357,6 +358,7 @@
             <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400 shrink-0">🐩 ชื่อ:</span>
             <input type="text" id="nameAI2" oninput="updateAIName(2, this.value)" placeholder="เช่น Gemini" class="dm-input w-full px-2.5 py-1 text-sm font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50/70 border border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
           </div>
+          <button id="btnSendAI2ToPeachzHaus" type="button" onclick="sendSlotToPeachzHaus(2)" title="ส่งคำแปลในช่องนี้ตรงไปจัดหน้าใน Peachz Haus Studio ทันที" class="w-full mb-1.5 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/40 dark:hover:bg-rose-800/60 border border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-200 text-xs font-semibold transition flex items-center justify-center gap-1">🍑 ส่งไปจัดหน้า</button>
           <textarea id="rawAI2" oninput="updateLiveInputStats()" rows="26" placeholder="วางคำแปลจาก AI ตัวที่ 2 ที่นี่..." class="dm-input w-full p-3 text-sm leading-relaxed border border-emerald-300 bg-emerald-50/25 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none resize-y h-[62vh] min-h-[500px]"></textarea>
           <div id="stat-ai2" class="text-[11px] dm-muted text-stone-400 mt-1 px-1">0 ย่อหน้า • 0 ตัวอักษร</div>
         </div>
@@ -366,6 +368,7 @@
             <span class="text-xs font-bold text-sky-600 dark:text-sky-400 shrink-0">🐕‍🦺 ชื่อ:</span>
             <input type="text" id="nameAI3" oninput="updateAIName(3, this.value)" placeholder="เช่น ChatGPT" class="dm-input w-full px-2.5 py-1 text-sm font-semibold text-sky-800 dark:text-sky-300 bg-sky-50/70 border border-sky-300 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none">
           </div>
+          <button id="btnSendAI3ToPeachzHaus" type="button" onclick="sendSlotToPeachzHaus(3)" title="ส่งคำแปลในช่องนี้ตรงไปจัดหน้าใน Peachz Haus Studio ทันที" class="w-full mb-1.5 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/40 dark:hover:bg-rose-800/60 border border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-200 text-xs font-semibold transition flex items-center justify-center gap-1">🍑 ส่งไปจัดหน้า</button>
           <textarea id="rawAI3" oninput="updateLiveInputStats()" rows="26" placeholder="วางคำแปลจาก AI ตัวที่ 3 ที่นี่..." class="dm-input w-full p-3 text-sm leading-relaxed border border-sky-300 bg-sky-50/25 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none resize-y h-[62vh] min-h-[500px]"></textarea>
           <div id="stat-ai3" class="text-[11px] dm-muted text-stone-400 mt-1 px-1">0 ย่อหน้า • 0 ตัวอักษร</div>
         </div>
@@ -3303,17 +3306,12 @@ ${prevAdvisorInfo}${nextPara}${historyText}
       showToast(`วางต้นฉบับ + คำแปลลงช่อง "${slotLabel}" เรียบร้อยแล้ว โฮ่ง! 🐶✨`);
     }
 
-    function sendFinalToPeachzHaus() {
-      const text = getCompiledFinalText();
-      if (!text || !text.trim()) {
-        showToast('ยังไม่มีข้อความฉบับสมบูรณ์ให้ส่งครับ');
-        return;
-      }
+    function dispatchToPeachzHausPayload(text, { sourceApp, title, defaultToast }) {
       try {
         localStorage.setItem('peachz_suite_handoff_v1', JSON.stringify({
           target: 'peachz-pwa',
-          sourceApp: 'น้องหมาช่วยแปลนิยาย',
-          title: 'ตอนที่แปลจากพี่ตูบ',
+          sourceApp,
+          title,
           content: text,
           createdAt: Date.now()
         }));
@@ -3324,14 +3322,50 @@ ${prevAdvisorInfo}${nextPara}${historyText}
       }
       dispatchSuiteHandoff('peachz-pwa', 'https://dblack-dev.github.io/peachz-pwa/?handoff=1', 'peachz_pwa_tab', (status) => {
         if (status === 'focused') {
-          showToast('ส่งข้อความไป Peachz Haus Studio แล้ว · สลับไปแท็บที่เปิดค้างไว้ให้แล้ว ✨');
+          showToast(`${defaultToast} · สลับไปแท็บที่เปิดค้างไว้ให้แล้ว ✨`);
         } else if (status === 'already_open') {
           showToast('ส่งข้อความไปแท็บ Peachz Haus ที่เปิดอยู่แล้ว (ไม่เปิดแท็บซ้ำ) · คลิกสลับแท็บไปดูได้เลย 🔔');
         } else if (status === 'blocked') {
           showToast('เตรียมข้อมูลส่งแล้ว · คลิกสลับไปแท็บ Peachz Haus Studio เพื่อรับได้เลย');
         } else {
-          showToast('ส่งข้อความไป Peachz Haus Studio แล้ว 🍑');
+          showToast(`${defaultToast} 🍑`);
         }
+      });
+    }
+
+    function sendFinalToPeachzHaus() {
+      const text = getCompiledFinalText();
+      if (!text || !text.trim()) {
+        showToast('ยังไม่มีข้อความฉบับสมบูรณ์ให้ส่งครับ');
+        return;
+      }
+      dispatchToPeachzHausPayload(text, {
+        sourceApp: 'น้องหมาช่วยแปลนิยาย',
+        title: 'ตอนที่แปลจากพี่ตูบ',
+        defaultToast: 'ส่งข้อความไป Peachz Haus Studio แล้ว'
+      });
+    }
+
+    function sendSlotToPeachzHaus(slot) {
+      const elInput = document.getElementById(`rawAI${slot}`);
+      const rawText = elInput ? String(elInput.value || '') : '';
+      const nameInput = document.getElementById(`nameAI${slot}`);
+      const fallbackName = state[`ai${slot}Name`] || `AI ${slot}`;
+      const modelName = String((nameInput ? nameInput.value : '') || fallbackName).trim() || `AI ${slot}`;
+      if (!rawText.trim()) {
+        showToast(`ช่อง "${modelName}" ยังไม่มีข้อความให้ส่งครับ`);
+        return;
+      }
+      const ref = (state && state.lastShelfRef) || {};
+      const title = ref.chapterTitle
+        ? `${ref.chapterTitle} (${modelName})`
+        : (ref.novelTitle && ref.chapterOrder
+          ? `${ref.novelTitle} - ตอนที่ ${ref.chapterOrder} (${modelName})`
+          : `คำแปลจาก ${modelName}`);
+      dispatchToPeachzHausPayload(rawText, {
+        sourceApp: `น้องหมาช่วยแปล (${modelName})`,
+        title,
+        defaultToast: `ส่งคำแปลช่อง "${modelName}" ไป Peachz Haus Studio แล้ว`
       });
     }
 
