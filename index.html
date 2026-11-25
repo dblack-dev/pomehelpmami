@@ -339,7 +339,7 @@
           <div class="flex items-center justify-between mb-1.5 h-8">
             <label class="dm-muted text-xs font-semibold text-stone-500 uppercase truncate">📄 ต้นฉบับ (แกนหลักจัดรูปแบบ)</label>
           </div>
-          <textarea id="rawSource" oninput="updateLiveInputStats()" rows="26" placeholder="วางเนื้อหานิยายต้นฉบับที่นี่..." class="dm-input w-full p-3 text-sm leading-relaxed bg-white border border-stone-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-y h-[62vh] min-h-[500px]"></textarea>
+          <textarea id="rawSource" oninput="updateLiveInputStats(true)" rows="26" placeholder="วางเนื้อหานิยายต้นฉบับที่นี่..." class="dm-input w-full p-3 text-sm leading-relaxed bg-white border border-stone-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-y h-[62vh] min-h-[500px]"></textarea>
           <div id="stat-source" class="text-[11px] dm-muted text-stone-400 mt-1 px-1">0 ย่อหน้า • 0 ตัวอักษร</div>
         </div>
 
@@ -349,7 +349,7 @@
             <input type="text" id="nameAI1" oninput="updateAIName(1, this.value)" placeholder="เช่น Claude" class="dm-input w-full px-2.5 py-1 text-sm font-semibold text-amber-800 dark:text-amber-300 bg-amber-50/70 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none">
           </div>
           <button id="btnSendAI1ToPeachzHaus" type="button" onclick="sendSlotToPeachzHaus(1)" title="ส่งคำแปลในช่องนี้ตรงไปจัดหน้าใน Peachz Haus Studio ทันที" class="w-full mb-1.5 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/40 dark:hover:bg-rose-800/60 border border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-200 text-xs font-semibold transition flex items-center justify-center gap-1">🍑 ส่งไปจัดหน้า</button>
-          <textarea id="rawAI1" oninput="updateLiveInputStats()" rows="26" placeholder="วางคำแปลจาก AI ตัวที่ 1 ที่นี่..." class="dm-input w-full p-3 text-sm leading-relaxed border border-amber-300 bg-amber-50/25 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-y h-[62vh] min-h-[500px]"></textarea>
+          <textarea id="rawAI1" oninput="updateLiveInputStats(true)" rows="26" placeholder="วางคำแปลจาก AI ตัวที่ 1 ที่นี่..." class="dm-input w-full p-3 text-sm leading-relaxed border border-amber-300 bg-amber-50/25 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-y h-[62vh] min-h-[500px]"></textarea>
           <div id="stat-ai1" class="text-[11px] dm-muted text-stone-400 mt-1 px-1">0 ย่อหน้า • 0 ตัวอักษร</div>
         </div>
 
@@ -359,7 +359,7 @@
             <input type="text" id="nameAI2" oninput="updateAIName(2, this.value)" placeholder="เช่น Gemini" class="dm-input w-full px-2.5 py-1 text-sm font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50/70 border border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none">
           </div>
           <button id="btnSendAI2ToPeachzHaus" type="button" onclick="sendSlotToPeachzHaus(2)" title="ส่งคำแปลในช่องนี้ตรงไปจัดหน้าใน Peachz Haus Studio ทันที" class="w-full mb-1.5 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/40 dark:hover:bg-rose-800/60 border border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-200 text-xs font-semibold transition flex items-center justify-center gap-1">🍑 ส่งไปจัดหน้า</button>
-          <textarea id="rawAI2" oninput="updateLiveInputStats()" rows="26" placeholder="วางคำแปลจาก AI ตัวที่ 2 ที่นี่..." class="dm-input w-full p-3 text-sm leading-relaxed border border-emerald-300 bg-emerald-50/25 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none resize-y h-[62vh] min-h-[500px]"></textarea>
+          <textarea id="rawAI2" oninput="updateLiveInputStats(true)" rows="26" placeholder="วางคำแปลจาก AI ตัวที่ 2 ที่นี่..." class="dm-input w-full p-3 text-sm leading-relaxed border border-emerald-300 bg-emerald-50/25 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none resize-y h-[62vh] min-h-[500px]"></textarea>
           <div id="stat-ai2" class="text-[11px] dm-muted text-stone-400 mt-1 px-1">0 ย่อหน้า • 0 ตัวอักษร</div>
         </div>
 
@@ -369,7 +369,7 @@
             <input type="text" id="nameAI3" oninput="updateAIName(3, this.value)" placeholder="เช่น ChatGPT" class="dm-input w-full px-2.5 py-1 text-sm font-semibold text-sky-800 dark:text-sky-300 bg-sky-50/70 border border-sky-300 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none">
           </div>
           <button id="btnSendAI3ToPeachzHaus" type="button" onclick="sendSlotToPeachzHaus(3)" title="ส่งคำแปลในช่องนี้ตรงไปจัดหน้าใน Peachz Haus Studio ทันที" class="w-full mb-1.5 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/40 dark:hover:bg-rose-800/60 border border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-200 text-xs font-semibold transition flex items-center justify-center gap-1">🍑 ส่งไปจัดหน้า</button>
-          <textarea id="rawAI3" oninput="updateLiveInputStats()" rows="26" placeholder="วางคำแปลจาก AI ตัวที่ 3 ที่นี่..." class="dm-input w-full p-3 text-sm leading-relaxed border border-sky-300 bg-sky-50/25 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none resize-y h-[62vh] min-h-[500px]"></textarea>
+          <textarea id="rawAI3" oninput="updateLiveInputStats(true)" rows="26" placeholder="วางคำแปลจาก AI ตัวที่ 3 ที่นี่..." class="dm-input w-full p-3 text-sm leading-relaxed border border-sky-300 bg-sky-50/25 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none resize-y h-[62vh] min-h-[500px]"></textarea>
           <div id="stat-ai3" class="text-[11px] dm-muted text-stone-400 mt-1 px-1">0 ย่อหน้า • 0 ตัวอักษร</div>
         </div>
       </div>
@@ -914,7 +914,23 @@
 
     // ================= LIVE INPUT STATS & CHAPTER SUMMARIZER =================
 
-    function updateLiveInputStats() {
+    let pomeInputSaveTimer = null;
+    function scheduleInputAutoSave() {
+      clearTimeout(pomeInputSaveTimer);
+      pomeInputSaveTimer = setTimeout(() => {
+        pomeInputSaveTimer = null;
+        saveState();
+      }, 400);
+    }
+    window.__pomeFlushDraftSave = () => {
+      if (pomeInputSaveTimer) {
+        clearTimeout(pomeInputSaveTimer);
+        pomeInputSaveTimer = null;
+        saveState();
+      }
+    };
+
+    function updateLiveInputStats(fromUserInput = false) {
       const src = document.getElementById('rawSource').value;
       const a1 = document.getElementById('rawAI1').value;
       const a2 = document.getElementById('rawAI2').value;
@@ -937,6 +953,8 @@
       document.getElementById('stat-ai1').innerHTML = formatStat(a1, true);
       document.getElementById('stat-ai2').innerHTML = formatStat(a2, true);
       document.getElementById('stat-ai3').innerHTML = formatStat(a3, true);
+
+      if (fromUserInput) scheduleInputAutoSave();
     }
 
     // ฟังก์ชันลดความแรงของคำอ่อนไหวในสำเนาข้อความ (ใช้เฉพาะตอนส่งให้ AI ย่อเมื่อติดบล็อก)
@@ -3356,6 +3374,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
         showToast(`ช่อง "${modelName}" ยังไม่มีข้อความให้ส่งครับ`);
         return;
       }
+      if (typeof saveState === 'function') saveState();
       const ref = (state && state.lastShelfRef) || {};
       const title = ref.chapterTitle
         ? `${ref.chapterTitle} (${modelName})`
@@ -3619,7 +3638,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
           document.getElementById('fontSizeSelect').value = state.fontSize || 'text-base';
           updateQuickSwitchLabel();
           updateLiveInputStats();
-          if (state.summaryResult) renderSummaryResult();
+          renderSummaryResult();
           if (state.paragraphs && state.paragraphs.length > 0) {
             renderWorkspace();
           } else {
@@ -3772,15 +3791,23 @@ ${prevAdvisorInfo}${nextPara}${historyText}
       let activeUser = null;
       let unsubscribeSync = null;
       let cloudPushTimer = null;
+      let pendingCloudPush = null;
       let initialSyncDone = false;
 
       async function pushToCloud(user, stateJson, updatedAt) {
         if (!user || !window.pomeCloudBridge) return;
+        pendingCloudPush = null;
         const snap = window.pomeCloudBridge.getStateSnapshot();
+        const payloadStr = String(stateJson || snap.stateJson || '');
         const ts = updatedAt || snap.updatedAt || Date.now();
+        if (payloadStr.length > 990000) {
+          if (cloudSyncBadge) cloudSyncBadge.textContent = 'ข้อมูลเกิน 1MB';
+          notify('⚠️ ข้อมูลยาวเกินลิมิต Cloud Sync (1MB) — กรุณากดล้างตอนเก่าก่อนซิงค์');
+          return;
+        }
         try {
           await setDoc(doc(db, 'users', user.uid, 'sync', SYNC_DOC_ID), {
-            stateJson: stateJson || snap.stateJson,
+            stateJson: payloadStr,
             updatedAt: ts,
             updatedBy: deviceId
           });
@@ -3793,9 +3820,27 @@ ${prevAdvisorInfo}${nextPara}${historyText}
 
       window.addEventListener('pome:local-saved', (e) => {
         if (!activeUser) return;
+        pendingCloudPush = { stateJson: e?.detail?.stateJson, updatedAt: e?.detail?.updatedAt };
         clearTimeout(cloudPushTimer);
-        cloudPushTimer = setTimeout(() => pushToCloud(activeUser, e?.detail?.stateJson, e?.detail?.updatedAt), 900);
+        cloudPushTimer = setTimeout(() => {
+          if (!activeUser || !pendingCloudPush) return;
+          const p = pendingCloudPush;
+          pushToCloud(activeUser, p.stateJson, p.updatedAt);
+        }, 450);
       });
+
+      const flushPendingCloudSync = () => {
+        try { window.__pomeFlushDraftSave?.(); } catch (e) {}
+        if (pendingCloudPush && activeUser) {
+          const p = pendingCloudPush;
+          clearTimeout(cloudPushTimer);
+          pushToCloud(activeUser, p.stateJson, p.updatedAt);
+        }
+      };
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) flushPendingCloudSync();
+      });
+      window.addEventListener('pagehide', flushPendingCloudSync);
 
       onAuthStateChanged(auth, async (user) => {
         activeUser = null;
