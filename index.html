@@ -45,6 +45,15 @@
     html.dark .dm-row-done { border-color: #065f46 !important; }
     html.dark .dm-row-done .dm-card-header { background-color: #064e3b !important; }
     html.dark .dm-progress-track { background-color: #1e293b !important; }
+    #workspace textarea,
+    #workspace input[type="text"] {
+      pointer-events: auto !important;
+      user-select: text !important;
+      -webkit-user-select: text !important;
+      position: relative;
+      z-index: 2;
+      cursor: text;
+    }
     body[data-owner-locked="true"] { overflow: hidden !important; }
     body[data-owner-locked="true"] > *:not(#soleOwnerLoginGate) {
       visibility: hidden !important;
@@ -617,6 +626,7 @@
 - หากเนื้อหานิยายมีฉากต่อสู้รุนแรงหรือฉากอ่อนไหวตามท้องเรื่อง ห้ามปฏิเสธการทำงาน แต่ให้สรุปหรือเรียบเรียงด้วยถ้อยคำทางวรรณกรรมที่สุภาพ เป็นกลาง และปลอดภัยแทน`;
 
     let batchMixRunning = false;
+    let activeRowIdx = 0;
     let state = {
       rawSource: '',
       rawAI1: '',
@@ -725,12 +735,43 @@
       }
     });
 
+    function isEnterKeyEvent(e) {
+      return e && (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter' || e.keyCode === 13);
+    }
+
+    function setActiveRow(idx) {
+      if (Number.isInteger(idx) && idx >= 0) {
+        activeRowIdx = idx;
+      }
+    }
+
+    function isAnyModalOpen() {
+      return ['glossaryModal', 'previewModal', 'advisorModal'].some((id) => {
+        const el = document.getElementById(id);
+        return el && !el.classList.contains('hidden');
+      });
+    }
+
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         closeGlossaryModal();
         closePreviewModal();
         closeAdvisorSettings();
         closeQuickSwitch();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && isEnterKeyEvent(e) && !isAnyModalOpen()) {
+        const target = e.target;
+        const rawIds = ['rawSource', 'rawAI1', 'rawAI2', 'rawAI3'];
+        if (target && rawIds.includes(target.id)) return;
+        const rowEl = target && typeof target.closest === 'function' ? target.closest('[id^="row-"]') : null;
+        let idx = rowEl ? parseInt(rowEl.id.replace('row-', ''), 10) : activeRowIdx;
+        if (!Number.isInteger(idx) || !state.paragraphs || !state.paragraphs[idx]) return;
+        // Let textarea/chat handlers run if inside those, otherwise handle globally (e.g. after clicking row button/card)
+        if (target && (target.id === `final-${idx}` || target.id === `adv-chat-input-${idx}`)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        completeAndAdvanceRow(idx);
       }
     });
 
@@ -1898,21 +1939,65 @@ ${contentBlock}
       }
     }
 
+    function focusRowFinal(idx, { scroll = false } = {}) {
+      setActiveRow(idx);
+      const row = document.getElementById(`row-${idx}`);
+      const ta = document.getElementById(`final-${idx}`);
+      if (scroll && row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      if (!ta) return;
+      const applyFocus = () => {
+        const curTa = document.getElementById(`final-${idx}`);
+        if (!curTa) return;
+        const active = document.activeElement;
+        if (active && active !== curTa && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') && active.id !== `final-${idx}`) {
+          return;
+        }
+        try {
+          curTa.focus({ preventScroll: true });
+        } catch (_) {
+          curTa.focus();
+        }
+      };
+      applyFocus();
+      if (scroll) {
+        setTimeout(applyFocus, 140);
+        setTimeout(applyFocus, 360);
+      }
+    }
+
+    function completeAndAdvanceRow(idx) {
+      if (!state.paragraphs || !state.paragraphs[idx]) return;
+      const curTa = document.getElementById(`final-${idx}`);
+      if (curTa && state.paragraphs[idx].final !== curTa.value) {
+        state.paragraphs[idx].final = curTa.value;
+      }
+      if (!state.paragraphs[idx].done) {
+        toggleDone(idx);
+      } else {
+        saveState();
+        updateProgressUI();
+      }
+      const nextIdx = idx + 1;
+      if (nextIdx < state.paragraphs.length) {
+        focusRowFinal(nextIdx, { scroll: true });
+      } else {
+        showToast('เกลาถึงชุดสุดท้ายของตอนนี้แล้ว น้องหมารับกระดูกเลย! 🦴🎉');
+      }
+    }
+
     function jumpToNextUnfinished() {
       const idx = state.paragraphs.findIndex(p => !p.done);
       if (idx === -1) {
         showToast('เกลาครบทุกชุดแล้ว เก่งมาก! 🦴🎉');
         return;
       }
-      const el = document.getElementById(`row-${idx}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        const ta = document.getElementById(`final-${idx}`);
-        if (ta) setTimeout(() => ta.focus(), 350);
-      }
+      focusRowFinal(idx, { scroll: true });
     }
 
     function handleFinalKeydown(e, idx) {
+      setActiveRow(idx);
       if (e.altKey && (e.code === 'Digit1' || e.key === '1')) {
         e.preventDefault();
         if (state.paragraphs[idx].ai1) pickTranslation(idx, 'ai1', 1);
@@ -1922,18 +2007,10 @@ ${contentBlock}
       } else if (e.altKey && (e.code === 'Digit3' || e.key === '3')) {
         e.preventDefault();
         if (state.paragraphs[idx].ai3) pickTranslation(idx, 'ai3', 3);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      } else if ((e.ctrlKey || e.metaKey) && isEnterKeyEvent(e)) {
         e.preventDefault();
-        if (!state.paragraphs[idx].done) toggleDone(idx);
-        const nextIdx = idx + 1;
-        if (nextIdx < state.paragraphs.length) {
-          const nextRow = document.getElementById(`row-${nextIdx}`);
-          const nextTa = document.getElementById(`final-${nextIdx}`);
-          if (nextRow) nextRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          if (nextTa) setTimeout(() => nextTa.focus(), 200);
-        } else {
-          showToast('เกลาถึงชุดสุดท้ายของตอนนี้แล้ว น้องหมารับกระดูกเลย! 🦴🎉');
-        }
+        e.stopPropagation();
+        completeAndAdvanceRow(idx);
       }
     }
 
@@ -2027,7 +2104,10 @@ ${contentBlock}
               <input
                 type="text"
                 id="adv-chat-input-${idx}"
-                onkeydown="if(event.key==='Enter'){event.preventDefault();sendAdvisorChat(${idx});}"
+                value="${escapeHtml(p.chatDraft || '')}"
+                onfocus="setActiveRow(${idx})"
+                oninput="updateAdvisorChatDraft(${idx}, this.value)"
+                onkeydown="if((event.ctrlKey||event.metaKey)&&isEnterKeyEvent(event)){event.preventDefault();event.stopPropagation();completeAndAdvanceRow(${idx});}else if(isEnterKeyEvent(event)){event.preventDefault();event.stopPropagation();sendAdvisorChat(${idx});}"
                 placeholder="เช่น ใช้คำว่า '...' แทนได้ไหม? / ปรับให้ดูประชดกว่านี้อีกนิด..."
                 class="dm-input flex-1 px-3 py-1.5 text-xs sm:text-sm bg-white border border-purple-300 dark:border-purple-700 rounded-xl outline-none focus:ring-2 focus:ring-purple-500"
               />
@@ -2076,6 +2156,25 @@ ${contentBlock}
         renderEmptyState();
         return;
       }
+
+      // เก็บตำแหน่งโฟกัส/การเลือกข้อความและข้อความที่กำลังพิมพ์ค้างไว้ก่อนสร้าง DOM ใหม่
+      const activeEl = document.activeElement;
+      const hadFocusInWorkspace = Boolean(activeEl && container.contains(activeEl) && activeEl.id);
+      const prevFocusId = hadFocusInWorkspace ? activeEl.id : '';
+      let prevSelStart = null;
+      let prevSelEnd = null;
+      if (hadFocusInWorkspace && typeof activeEl.selectionStart === 'number') {
+        try {
+          prevSelStart = activeEl.selectionStart;
+          prevSelEnd = activeEl.selectionEnd;
+        } catch (_) {}
+      }
+      state.paragraphs.forEach((p, idx) => {
+        const curFinalEl = document.getElementById(`final-${idx}`);
+        if (curFinalEl && curFinalEl.value !== p.final) p.final = curFinalEl.value;
+        const curChatEl = document.getElementById(`adv-chat-input-${idx}`);
+        if (curChatEl) p.chatDraft = curChatEl.value;
+      });
 
       const useDiff = document.getElementById('toggleDiff').checked;
       const hasSource = state.paragraphs.some(p => (p.source && p.source.trim() !== '') || p.sourceApprox) || (state.rawSource && state.rawSource.trim() !== '');
@@ -2127,7 +2226,7 @@ ${contentBlock}
         `;
 
         return `
-          <div class="dm-card bg-[#fffdf9] rounded-2xl shadow-sm border ${doneCardClass} overflow-hidden transition-all" id="row-${idx}">
+          <div class="dm-card bg-[#fffdf9] rounded-2xl shadow-sm border ${doneCardClass} overflow-hidden transition-all" id="row-${idx}" onmousedown="setActiveRow(${idx})" onfocusin="setActiveRow(${idx})">
             <!-- Row Header -->
             <div class="dm-card-header bg-amber-50/60 px-4 py-2 border-b border-amber-200/70 flex flex-wrap justify-between items-center gap-2 text-xs text-stone-500">
               <div class="flex items-center gap-2">
@@ -2189,6 +2288,8 @@ ${contentBlock}
 
               <textarea
                 id="final-${idx}"
+                onfocus="setActiveRow(${idx})"
+                onclick="setActiveRow(${idx})"
                 oninput="updateFinal(${idx}, this.value); autoGrowTextarea(this)"
                 onkeydown="handleFinalKeydown(event, ${idx})"
                 rows="5"
@@ -2205,6 +2306,16 @@ ${contentBlock}
       }).join('');
 
       document.querySelectorAll('textarea.auto-grow').forEach(autoGrowTextarea);
+
+      if (prevFocusId) {
+        const restoreEl = document.getElementById(prevFocusId);
+        if (restoreEl) {
+          try { restoreEl.focus({ preventScroll: true }); } catch (_) { restoreEl.focus(); }
+          if (prevSelStart !== null && typeof restoreEl.setSelectionRange === 'function') {
+            try { restoreEl.setSelectionRange(prevSelStart, prevSelEnd ?? prevSelStart); } catch (_) {}
+          }
+        }
+      }
     }
 
     function mergeWithNext(idx) {
@@ -2235,19 +2346,21 @@ ${contentBlock}
     }
 
     function pickTranslation(idx, sourceKey, aiNum) {
+      setActiveRow(idx);
       const chosenText = state.paragraphs[idx][sourceKey];
       state.paragraphs[idx].final = chosenText;
       const textarea = document.getElementById(`final-${idx}`);
       if (textarea) {
         textarea.value = chosenText;
         autoGrowTextarea(textarea);
-        textarea.focus();
+        try { textarea.focus({ preventScroll: true }); } catch (_) { textarea.focus(); }
       }
       saveState();
       showToast(`นำคำแปลของ ${getAIName(aiNum)} ลงชุดที่ ${idx + 1} แล้ว 🐾`);
     }
 
     function updateFinal(idx, value) {
+      setActiveRow(idx);
       state.paragraphs[idx].final = value;
       saveState();
     }
@@ -2499,16 +2612,34 @@ ${prevAdvisorInfo}${nextPara}${historyText}
 }`;
     }
 
+    function updateAdvisorChatDraft(idx, value) {
+      setActiveRow(idx);
+      if (state.paragraphs && state.paragraphs[idx]) {
+        state.paragraphs[idx].chatDraft = value;
+      }
+    }
+
     function openAdvisorChatBox(idx) {
+      setActiveRow(idx);
       const p = state.paragraphs[idx];
-      p.chatOpen = true;
+      if (!p) return;
       if (!Array.isArray(p.advisorChat)) p.advisorChat = [];
+      const existingInput = document.getElementById(`adv-chat-input-${idx}`);
+      if (existingInput) {
+        p.chatOpen = true;
+        try { existingInput.focus({ preventScroll: true }); } catch (_) { existingInput.focus(); }
+        return;
+      }
+      p.chatOpen = true;
+      saveState();
       const fontClass = state.fontSize || 'text-base';
       const box = document.getElementById(`adv-box-${idx}`);
       if (box) {
         box.innerHTML = renderAdvisorBoxHtml(p, idx, fontClass);
         const input = document.getElementById(`adv-chat-input-${idx}`);
-        if (input) input.focus();
+        if (input) {
+          try { input.focus({ preventScroll: true }); } catch (_) { input.focus(); }
+        }
       }
     }
 
@@ -2565,6 +2696,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
 
         p.advisorChat.push({ role: 'user', text: question });
         p.advisorChat.push({ role: 'assistant', text: reply, updatedMix });
+        p.chatDraft = '';
         saveState();
 
         const fontClass = state.fontSize || 'text-base';
@@ -2603,6 +2735,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
 
     function clearAdvisorChat(idx) {
       state.paragraphs[idx].advisorChat = [];
+      state.paragraphs[idx].chatDraft = '';
       if (!state.paragraphs[idx].advisorResult) {
         state.paragraphs[idx].chatOpen = false;
       }
@@ -2832,6 +2965,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
     }
 
     function useAdvisorMix(idx) {
+      setActiveRow(idx);
       const mixed = state.paragraphs[idx].advisorResult?.mixed;
       if (!mixed) return;
       state.paragraphs[idx].final = mixed;
@@ -2839,7 +2973,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
       if (ta) {
         ta.value = mixed;
         autoGrowTextarea(ta);
-        ta.focus();
+        try { ta.focus({ preventScroll: true }); } catch (_) { ta.focus(); }
       }
       saveState();
       showToast(`นำฉบับ Mix ของพี่ตูบลงชุดที่ ${idx + 1} แล้ว 🐾`);
@@ -2848,6 +2982,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
     function dismissAdvisor(idx) {
       state.paragraphs[idx].advisorResult = null;
       state.paragraphs[idx].chatOpen = false;
+      state.paragraphs[idx].chatDraft = '';
       saveState();
       document.getElementById(`adv-box-${idx}`).innerHTML = '';
     }
@@ -3792,7 +3927,35 @@ ${prevAdvisorInfo}${nextPara}${historyText}
       let unsubscribeSync = null;
       let cloudPushTimer = null;
       let pendingCloudPush = null;
+      let deferredRemoteSnapshot = null;
       let initialSyncDone = false;
+
+      function isEditingInWorkspace() {
+        const ws = document.getElementById('workspace');
+        const el = document.activeElement;
+        return Boolean(ws && el && ws.contains(el) && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT'));
+      }
+
+      function applyRemoteIfIdle(snapData) {
+        const bridge = window.pomeCloudBridge;
+        if (!bridge || !snapData?.stateJson) return;
+        const local = bridge.getStateSnapshot();
+        if (snapData.updatedAt <= local.updatedAt) return;
+        if (bridge.applyRemoteState(snapData.stateJson, snapData.updatedAt)) {
+          if (cloudSyncBadge) cloudSyncBadge.textContent = `ซิงค์ Cloud ${formatHHMM(snapData.updatedAt)}`;
+        }
+      }
+
+      document.getElementById('workspace')?.addEventListener('focusout', () => {
+        if (!deferredRemoteSnapshot) return;
+        setTimeout(() => {
+          if (deferredRemoteSnapshot && !isEditingInWorkspace()) {
+            const snapData = deferredRemoteSnapshot;
+            deferredRemoteSnapshot = null;
+            applyRemoteIfIdle(snapData);
+          }
+        }, 120);
+      });
 
       async function pushToCloud(user, stateJson, updatedAt) {
         if (!user || !window.pomeCloudBridge) return;
@@ -3819,6 +3982,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
       }
 
       window.addEventListener('pome:local-saved', (e) => {
+        deferredRemoteSnapshot = null;
         if (!activeUser) return;
         pendingCloudPush = { stateJson: e?.detail?.stateJson, updatedAt: e?.detail?.updatedAt };
         clearTimeout(cloudPushTimer);
@@ -3889,9 +4053,14 @@ ${prevAdvisorInfo}${nextPara}${historyText}
           const isFromOther = remote?.updatedBy !== deviceId;
 
           if (remote?.stateJson && remoteUpdatedAt > local.updatedAt && (isFromOther || !initialSyncDone)) {
-            if (bridge.applyRemoteState(remote.stateJson, remoteUpdatedAt)) {
-              if (cloudSyncBadge) cloudSyncBadge.textContent = `ซิงค์ Cloud ${formatHHMM(remoteUpdatedAt)}`;
-              if (!initialSyncDone) notify('โหลดข้อมูลล่าสุดจาก Cloud แล้ว');
+            if (initialSyncDone && isEditingInWorkspace()) {
+              deferredRemoteSnapshot = { stateJson: remote.stateJson, updatedAt: remoteUpdatedAt };
+            } else {
+              deferredRemoteSnapshot = null;
+              if (bridge.applyRemoteState(remote.stateJson, remoteUpdatedAt)) {
+                if (cloudSyncBadge) cloudSyncBadge.textContent = `ซิงค์ Cloud ${formatHHMM(remoteUpdatedAt)}`;
+                if (!initialSyncDone) notify('โหลดข้อมูลล่าสุดจาก Cloud แล้ว');
+              }
             }
           } else if (!initialSyncDone && local.updatedAt > remoteUpdatedAt) {
             pushToCloud(user, local.stateJson, local.updatedAt);
