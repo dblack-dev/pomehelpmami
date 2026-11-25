@@ -735,6 +735,20 @@
       }
     });
 
+    window.__pomeAdvisorInFlight = 0;
+    window.__pomeLastWorkspaceInteractAt = 0;
+    const sendingChatRows = new Set();
+    let chatDraftSaveTimer = null;
+
+    ['pointerdown', 'mousedown', 'keydown', 'input'].forEach((evtName) => {
+      document.addEventListener(evtName, (ev) => {
+        const ws = document.getElementById('workspace');
+        if (ws && ev.target && ws.contains(ev.target)) {
+          window.__pomeLastWorkspaceInteractAt = Date.now();
+        }
+      }, true);
+    });
+
     function isEnterKeyEvent(e) {
       return e && (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter' || e.keyCode === 13);
     }
@@ -838,7 +852,6 @@
             });
           }
           sanitizeLegacyModels();
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         } catch (e) { console.error(e); }
       }
     }
@@ -1879,8 +1892,12 @@ ${contentBlock}
     }
 
     function autoGrowTextarea(el) {
+      const prevScrollY = window.scrollY;
       el.style.height = 'auto';
       el.style.height = Math.max(el.scrollHeight + 4, 100) + 'px';
+      if (Math.abs(window.scrollY - prevScrollY) > 1) {
+        window.scrollTo(window.scrollX, prevScrollY);
+      }
     }
 
     function updateProgressUI() {
@@ -2042,7 +2059,7 @@ ${contentBlock}
                   <div class="mt-2 p-2.5 rounded-xl bg-purple-50/80 dark:bg-slate-950/80 border border-purple-200/80 dark:border-purple-800/60">
                     <div class="flex flex-wrap items-center justify-between gap-1.5 mb-1">
                       <span class="text-[11px] font-bold text-purple-800 dark:text-purple-300">✨ ประโยคที่ปรับตามที่คุยกัน:</span>
-                      <button onclick="useChatSuggestedMix(${idx}, ${mIdx})" class="px-2.5 py-0.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-semibold transition shadow-sm">
+                      <button type="button" onmousedown="event.preventDefault()" onclick="useChatSuggestedMix(${idx}, ${mIdx})" class="px-2.5 py-0.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-semibold transition shadow-sm">
                         ⬇️ นำประโยคนี้ไปใช้
                       </button>
                     </div>
@@ -2063,7 +2080,7 @@ ${contentBlock}
             </span>
             <div class="flex items-center gap-2">
               ${mixed ? `
-                <button onclick="useAdvisorMix(${idx})" class="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold transition shadow-sm">
+                <button type="button" onmousedown="event.preventDefault()" onclick="useAdvisorMix(${idx})" class="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold transition shadow-sm">
                   ⬇️ ใช้ฉบับ Mix นี้
                 </button>
               ` : ''}
@@ -2113,6 +2130,7 @@ ${contentBlock}
               />
               <button
                 type="button"
+                onmousedown="event.preventDefault()"
                 onclick="sendAdvisorChat(${idx})"
                 id="adv-chat-btn-${idx}"
                 class="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-semibold shadow-sm transition shrink-0"
@@ -2270,13 +2288,13 @@ ${contentBlock}
               <div class="flex flex-wrap justify-between items-center mb-2 gap-2">
                 <div class="flex flex-wrap items-center gap-2">
                   <label class="text-xs font-bold text-orange-800 dark:text-indigo-400 uppercase">🦴 คำแปลฉบับสมบูรณ์ (แก้ไขตรงนี้):</label>
-                  <button onclick="askAdvisor(${idx})" id="adv-btn-${idx}" class="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-sm transition flex items-center gap-1">
+                  <button type="button" onmousedown="event.preventDefault()" onclick="askAdvisor(${idx})" id="adv-btn-${idx}" class="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-sm transition flex items-center gap-1">
                     🐶 ให้ผู้ช่วย Mix &amp; แนะนำคำ
                   </button>
-                  <button onclick="openAdvisorChatBox(${idx})" class="dm-select px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-800 dark:text-purple-300 text-xs font-semibold transition flex items-center gap-1">
+                  <button type="button" onmousedown="event.preventDefault()" onclick="openAdvisorChatBox(${idx})" class="dm-select px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-800 dark:text-purple-300 text-xs font-semibold transition flex items-center gap-1">
                     💬 คุยปรึกษาพี่ตูบ
                   </button>
-                  <button onclick="copyAdvisorPrompt(${idx})" title="ก๊อปข้อมูลชุดนี้ไปวางถามในเว็บ ChatGPT/Claude/Gemini" class="dm-select px-2 py-1 rounded-lg bg-white border border-purple-200 hover:bg-purple-50 text-purple-700 dark:text-purple-300 text-xs font-medium transition">
+                  <button type="button" onmousedown="event.preventDefault()" onclick="copyAdvisorPrompt(${idx})" title="ก๊อปข้อมูลชุดนี้ไปวางถามในเว็บ ChatGPT/Claude/Gemini" class="dm-select px-2 py-1 rounded-lg bg-white border border-purple-200 hover:bg-purple-50 text-purple-700 dark:text-purple-300 text-xs font-medium transition">
                     📋 ก๊อปคำสั่งไปถามแชท
                   </button>
                 </div>
@@ -2614,8 +2632,13 @@ ${prevAdvisorInfo}${nextPara}${historyText}
 
     function updateAdvisorChatDraft(idx, value) {
       setActiveRow(idx);
+      window.__pomeLastWorkspaceInteractAt = Date.now();
       if (state.paragraphs && state.paragraphs[idx]) {
         state.paragraphs[idx].chatDraft = value;
+        clearTimeout(chatDraftSaveTimer);
+        chatDraftSaveTimer = setTimeout(() => {
+          saveState();
+        }, 450);
       }
     }
 
@@ -2644,12 +2667,15 @@ ${prevAdvisorInfo}${nextPara}${historyText}
     }
 
     async function sendAdvisorChat(idx) {
+      setActiveRow(idx);
+      window.__pomeLastWorkspaceInteractAt = Date.now();
+      if (sendingChatRows.has(idx)) return;
       const inputEl = document.getElementById(`adv-chat-input-${idx}`);
       if (!inputEl) return;
-      const question = inputEl.value.trim();
+      const question = String(inputEl.value || state.paragraphs[idx]?.chatDraft || '').trim();
       if (!question) {
         showToast('พิมพ์คำถามหรือคำที่อยากปรึกษาพี่ตูบก่อนนะครับ 🐶');
-        inputEl.focus();
+        try { inputEl.focus({ preventScroll: true }); } catch (_) { inputEl.focus(); }
         return;
       }
 
@@ -2660,8 +2686,13 @@ ${prevAdvisorInfo}${nextPara}${historyText}
       }
 
       const p = state.paragraphs[idx];
+      if (!p) return;
       if (!Array.isArray(p.advisorChat)) p.advisorChat = [];
       p.chatOpen = true;
+
+      clearTimeout(chatDraftSaveTimer);
+      sendingChatRows.add(idx);
+      window.__pomeAdvisorInFlight = (window.__pomeAdvisorInFlight || 0) + 1;
 
       const btn = document.getElementById(`adv-chat-btn-${idx}`);
       inputEl.disabled = true;
@@ -2694,32 +2725,43 @@ ${prevAdvisorInfo}${nextPara}${historyText}
           reply = cleaned;
         }
 
-        p.advisorChat.push({ role: 'user', text: question });
-        p.advisorChat.push({ role: 'assistant', text: reply, updatedMix });
-        p.chatDraft = '';
+        const curP = state.paragraphs[idx] || p;
+        if (!Array.isArray(curP.advisorChat)) curP.advisorChat = [];
+        curP.chatOpen = true;
+        curP.advisorChat.push({ role: 'user', text: question });
+        curP.advisorChat.push({ role: 'assistant', text: reply, updatedMix });
+        curP.chatDraft = '';
         saveState();
 
         const fontClass = state.fontSize || 'text-base';
         const box = document.getElementById(`adv-box-${idx}`);
         if (box) {
-          box.innerHTML = renderAdvisorBoxHtml(p, idx, fontClass);
+          box.innerHTML = renderAdvisorBoxHtml(curP, idx, fontClass);
           const listEl = document.getElementById(`adv-chat-list-${idx}`);
           if (listEl) listEl.scrollTop = listEl.scrollHeight;
           const newInput = document.getElementById(`adv-chat-input-${idx}`);
-          if (newInput) newInput.focus();
+          if (newInput) {
+            try { newInput.focus({ preventScroll: true }); } catch (_) { newInput.focus(); }
+          }
         }
       } catch (err) {
         console.error(err);
         alert('เกิดข้อผิดพลาดในการคุยกับพี่ตูบ:\n' + err.message);
-        inputEl.disabled = false;
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = '🐾 ถามพี่ตูบ';
+        const curInput = document.getElementById(`adv-chat-input-${idx}`);
+        const curBtn = document.getElementById(`adv-chat-btn-${idx}`);
+        if (curInput) curInput.disabled = false;
+        if (curBtn) {
+          curBtn.disabled = false;
+          curBtn.innerHTML = '🐾 ถามพี่ตูบ';
         }
+      } finally {
+        sendingChatRows.delete(idx);
+        window.__pomeAdvisorInFlight = Math.max(0, (window.__pomeAdvisorInFlight || 1) - 1);
       }
     }
 
     function useChatSuggestedMix(idx, msgIdx) {
+      setActiveRow(idx);
       const msg = state.paragraphs[idx]?.advisorChat?.[msgIdx];
       if (!msg || !msg.updatedMix) return;
       state.paragraphs[idx].final = msg.updatedMix;
@@ -2727,7 +2769,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
       if (ta) {
         ta.value = msg.updatedMix;
         autoGrowTextarea(ta);
-        ta.focus();
+        try { ta.focus({ preventScroll: true }); } catch (_) { ta.focus(); }
       }
       saveState();
       showToast(`นำประโยคที่ปรึกษากับพี่ตูบลงชุดที่ ${idx + 1} แล้ว 🐾`);
@@ -2880,6 +2922,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
         return false;
       }
 
+      window.__pomeAdvisorInFlight = (window.__pomeAdvisorInFlight || 0) + 1;
       const btn = document.getElementById(`adv-btn-${idx}`);
       const origHtml = btn ? btn.innerHTML : '';
       if (btn) {
@@ -2889,13 +2932,15 @@ ${prevAdvisorInfo}${nextPara}${historyText}
 
       try {
         const result = await callAdvisorAPI(state.paragraphs[idx], idx);
-        state.paragraphs[idx].advisorResult = result;
-        state.paragraphs[idx].chatOpen = true;
+        const curP = state.paragraphs[idx];
+        if (!curP) return false;
+        curP.advisorResult = result;
+        curP.chatOpen = true;
         saveState();
 
         const fontClass = state.fontSize || 'text-base';
         const box = document.getElementById(`adv-box-${idx}`);
-        if (box) box.innerHTML = renderAdvisorBoxHtml(state.paragraphs[idx], idx, fontClass);
+        if (box) box.innerHTML = renderAdvisorBoxHtml(curP, idx, fontClass);
         if (!silent) showToast('พี่ตูบ Mix คำแปลและเตรียมคำแนะนำให้เรียบร้อย! 🐶✨');
         return true;
       } catch (err) {
@@ -2903,9 +2948,11 @@ ${prevAdvisorInfo}${nextPara}${historyText}
         if (!silent) alert('เกิดข้อผิดพลาดจากผู้ช่วย AI:\n' + err.message);
         return false;
       } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = origHtml;
+        window.__pomeAdvisorInFlight = Math.max(0, (window.__pomeAdvisorInFlight || 1) - 1);
+        const curBtn = document.getElementById(`adv-btn-${idx}`);
+        if (curBtn) {
+          curBtn.disabled = false;
+          curBtn.innerHTML = origHtml;
         }
       }
     }
@@ -3753,33 +3800,42 @@ ${prevAdvisorInfo}${nextPara}${historyText}
         try {
           const parsed = JSON.parse(stateJson);
           if (!parsed || typeof parsed !== 'object') return false;
+          if (localStorage.getItem(STORAGE_KEY) === stateJson) {
+            pomeSuppressStorageHook = true;
+            try {
+              _origPomeSetItem.call(localStorage, POME_UPDATED_AT_KEY, String(updatedAt || Date.now()));
+            } finally {
+              pomeSuppressStorageHook = false;
+            }
+            return false;
+          }
           pomeSuppressStorageHook = true;
           try {
             _origPomeSetItem.call(localStorage, STORAGE_KEY, stateJson);
             _origPomeSetItem.call(localStorage, POME_UPDATED_AT_KEY, String(updatedAt || Date.now()));
+            loadState();
+            applyDarkMode(state.darkMode);
+            document.getElementById('nameAI1').value = state.ai1Name || 'AI 1';
+            document.getElementById('nameAI2').value = state.ai2Name || 'AI 2';
+            document.getElementById('nameAI3').value = state.ai3Name || 'AI 3';
+            document.getElementById('rawSource').value = state.rawSource || '';
+            document.getElementById('rawAI1').value = state.rawAI1 || '';
+            document.getElementById('rawAI2').value = state.rawAI2 || '';
+            document.getElementById('rawAI3').value = state.rawAI3 || '';
+            document.getElementById('alignMode').value = state.alignMode || 'anchor';
+            document.getElementById('fontSizeSelect').value = state.fontSize || 'text-base';
+            updateQuickSwitchLabel();
+            updateLiveInputStats();
+            renderSummaryResult();
+            if (state.paragraphs && state.paragraphs.length > 0) {
+              renderWorkspace();
+            } else {
+              renderEmptyState();
+            }
+            if (typeof checkPomeIncomingHandoff === 'function') checkPomeIncomingHandoff();
           } finally {
             pomeSuppressStorageHook = false;
           }
-          loadState();
-          applyDarkMode(state.darkMode);
-          document.getElementById('nameAI1').value = state.ai1Name || 'AI 1';
-          document.getElementById('nameAI2').value = state.ai2Name || 'AI 2';
-          document.getElementById('nameAI3').value = state.ai3Name || 'AI 3';
-          document.getElementById('rawSource').value = state.rawSource || '';
-          document.getElementById('rawAI1').value = state.rawAI1 || '';
-          document.getElementById('rawAI2').value = state.rawAI2 || '';
-          document.getElementById('rawAI3').value = state.rawAI3 || '';
-          document.getElementById('alignMode').value = state.alignMode || 'anchor';
-          document.getElementById('fontSizeSelect').value = state.fontSize || 'text-base';
-          updateQuickSwitchLabel();
-          updateLiveInputStats();
-          renderSummaryResult();
-          if (state.paragraphs && state.paragraphs.length > 0) {
-            renderWorkspace();
-          } else {
-            renderEmptyState();
-          }
-          if (typeof checkPomeIncomingHandoff === 'function') checkPomeIncomingHandoff();
           return true;
         } catch (e) {
           console.warn('pomeCloudBridge applyRemoteState failed:', e);
@@ -3931,9 +3987,12 @@ ${prevAdvisorInfo}${nextPara}${historyText}
       let initialSyncDone = false;
 
       function isEditingInWorkspace() {
+        if ((window.__pomeAdvisorInFlight || 0) > 0) return true;
+        if (typeof batchMixRunning !== 'undefined' && batchMixRunning) return true;
+        if (Date.now() - (window.__pomeLastWorkspaceInteractAt || 0) < 1200) return true;
         const ws = document.getElementById('workspace');
         const el = document.activeElement;
-        return Boolean(ws && el && ws.contains(el) && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT'));
+        return Boolean(ws && el && ws.contains(el) && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.tagName === 'BUTTON'));
       }
 
       function applyRemoteIfIdle(snapData) {
@@ -3954,7 +4013,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
             deferredRemoteSnapshot = null;
             applyRemoteIfIdle(snapData);
           }
-        }, 120);
+        }, 600);
       });
 
       async function pushToCloud(user, stateJson, updatedAt) {
@@ -4053,7 +4112,10 @@ ${prevAdvisorInfo}${nextPara}${historyText}
           const isFromOther = remote?.updatedBy !== deviceId;
 
           if (remote?.stateJson && remoteUpdatedAt > local.updatedAt && (isFromOther || !initialSyncDone)) {
-            if (initialSyncDone && isEditingInWorkspace()) {
+            if (remote.stateJson === local.stateJson) {
+              deferredRemoteSnapshot = null;
+              if (cloudSyncBadge) cloudSyncBadge.textContent = `ซิงค์ Cloud ${formatHHMM(remoteUpdatedAt)}`;
+            } else if (initialSyncDone && isEditingInWorkspace()) {
               deferredRemoteSnapshot = { stateJson: remote.stateJson, updatedAt: remoteUpdatedAt };
             } else {
               deferredRemoteSnapshot = null;
