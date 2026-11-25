@@ -1791,7 +1791,7 @@ ${contentBlock}
       }
 
       if (state.paragraphs.length > 0) {
-        const hasEdits = state.paragraphs.some(p => p.final && p.final.trim() !== '');
+        const hasEdits = state.paragraphs.some(p => (p.final && p.final.trim() !== '') || p.done);
         if (hasEdits && !confirm('การจัดเรียงใหม่จะแทนที่ข้อความที่คุณกำลังแก้ไขอยู่ ต้องการดำเนินการต่อหรือไม่?')) {
           return;
         }
@@ -1823,16 +1823,20 @@ ${contentBlock}
 
       state.paragraphs = rows.map(r => ({
         ...r,
-        final: r.ai1 || r.ai2 || r.ai3 || '',
+        final: '',
         done: false,
         advisorResult: null,
         advisorChat: [],
-        chatOpen: false
+        chatOpen: false,
+        chatDraft: ''
       }));
 
       saveState();
       renderWorkspace();
       document.getElementById('inputPanel').classList.add('hidden');
+      if (state.paragraphs.length > 0) {
+        focusRowFinal(0, { scroll: false });
+      }
       showToast(`จัดเรียงเทียบเนื้อหาทั้งหมด ${state.paragraphs.length} ชุดเรียบร้อย โฮ่ง! 🐾`);
     }
 
@@ -1936,66 +1940,87 @@ ${contentBlock}
       }
     }
 
-    function toggleDone(idx) {
-      state.paragraphs[idx].done = !state.paragraphs[idx].done;
+    let lastAutoFocusToken = 0;
+
+    function toggleDone(idx, advanceOnDone = false) {
+      const p = state.paragraphs?.[idx];
+      if (!p) return;
+      const curTa = document.getElementById(`final-${idx}`);
+      if (curTa && p.final !== curTa.value) {
+        p.final = curTa.value;
+      }
+      p.done = !p.done;
       saveState();
       updateProgressUI();
 
       const card = document.getElementById(`row-${idx}`);
       const btn = document.getElementById(`done-btn-${idx}`);
-      if (state.paragraphs[idx].done) {
+      if (p.done) {
         card.classList.add('dm-row-done', 'border-emerald-400', 'opacity-85');
         card.classList.remove('border-amber-200/80');
         btn.className = 'px-4 py-1.5 rounded-xl bg-emerald-600 text-white text-xs sm:text-sm font-semibold transition shadow-sm';
         btn.innerHTML = '🐾 เสร็จแล้ว!';
+        if (advanceOnDone) {
+          const nextIdx = idx + 1;
+          if (nextIdx < state.paragraphs.length) {
+            focusRowFinal(nextIdx, { scroll: true });
+          } else {
+            showToast('เกลาถึงชุดสุดท้ายของตอนนี้แล้ว น้องหมารับกระดูกเลย! 🦴🎉');
+          }
+        }
       } else {
         card.classList.remove('dm-row-done', 'border-emerald-400', 'opacity-85');
         card.classList.add('border-amber-200/80');
         btn.className = 'dm-select px-4 py-1.5 rounded-xl bg-white border border-stone-300 hover:bg-amber-50 text-stone-600 text-xs sm:text-sm font-medium transition';
         btn.innerHTML = '☐ ยังไม่เสร็จ';
+        if (advanceOnDone) {
+          focusRowFinal(idx, { scroll: false });
+        }
       }
     }
 
     function focusRowFinal(idx, { scroll = false } = {}) {
+      const token = ++lastAutoFocusToken;
       setActiveRow(idx);
       const row = document.getElementById(`row-${idx}`);
-      const ta = document.getElementById(`final-${idx}`);
-      if (scroll && row) {
-        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-      if (!ta) return;
       const applyFocus = () => {
         const curTa = document.getElementById(`final-${idx}`);
         if (!curTa) return;
-        const active = document.activeElement;
-        if (active && active !== curTa && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') && active.id !== `final-${idx}`) {
-          return;
-        }
         try {
           curTa.focus({ preventScroll: true });
         } catch (_) {
           curTa.focus();
         }
+        try {
+          const len = curTa.value.length;
+          curTa.setSelectionRange(len, len);
+        } catch (_) {}
       };
       applyFocus();
-      if (scroll) {
-        setTimeout(applyFocus, 140);
-        setTimeout(applyFocus, 360);
+      if (scroll && row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const reassert = () => {
+          if (token !== lastAutoFocusToken || activeRowIdx !== idx) return;
+          const curTa = document.getElementById(`final-${idx}`);
+          if (curTa && document.activeElement !== curTa) applyFocus();
+        };
+        setTimeout(reassert, 150);
+        setTimeout(reassert, 350);
       }
     }
 
     function completeAndAdvanceRow(idx) {
       if (!state.paragraphs || !state.paragraphs[idx]) return;
+      if (!state.paragraphs[idx].done) {
+        toggleDone(idx, true);
+        return;
+      }
       const curTa = document.getElementById(`final-${idx}`);
       if (curTa && state.paragraphs[idx].final !== curTa.value) {
         state.paragraphs[idx].final = curTa.value;
       }
-      if (!state.paragraphs[idx].done) {
-        toggleDone(idx);
-      } else {
-        saveState();
-        updateProgressUI();
-      }
+      saveState();
+      updateProgressUI();
       const nextIdx = idx + 1;
       if (nextIdx < state.paragraphs.length) {
         focusRowFinal(nextIdx, { scroll: true });
@@ -2311,12 +2336,13 @@ ${contentBlock}
                 oninput="updateFinal(${idx}, this.value); autoGrowTextarea(this)"
                 onkeydown="handleFinalKeydown(event, ${idx})"
                 rows="5"
+                placeholder="กดเลือกคำแปลด้านบน (Alt+1/2/3) หรือพิมพ์คำแปลที่ชอบที่นี่..."
                 class="dm-input auto-grow w-full p-3.5 min-h-[150px] bg-white border border-amber-200 rounded-xl ${fontClass} leading-relaxed text-stone-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-y"
               >${escapeHtml(p.final)}</textarea>
 
               <div class="mt-2.5 flex flex-wrap justify-between items-center gap-2">
                 <span class="dm-muted text-[11px] text-stone-400">คีย์ลัด: <kbd class="px-1.5 py-0.5 rounded bg-stone-200 dark:bg-slate-700 text-[10px]">Alt+1/2/3</kbd> เลือก AI | <kbd class="px-1.5 py-0.5 rounded bg-stone-200 dark:bg-slate-700 text-[10px]">Ctrl+Enter</kbd> เสร็จ &amp; ไปต่อ</span>
-                <button onclick="toggleDone(${idx})" id="done-btn-${idx}" title="คีย์ลัด: Ctrl + Enter เพื่อติ๊กเสร็จและไปชุดถัดไป" class="${doneBtnClass}">${doneBtnText}</button>
+                <button type="button" onmousedown="event.preventDefault()" onclick="toggleDone(${idx}, true)" id="done-btn-${idx}" title="คีย์ลัด: Ctrl + Enter เพื่อติ๊กเสร็จและไปชุดถัดไป" class="${doneBtnClass}">${doneBtnText}</button>
               </div>
             </div>
           </div>
@@ -3251,7 +3277,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
         showToast('ยังไม่มีข้อความฉบับสมบูรณ์ให้อ่านตรวจทานครับ');
         return;
       }
-      const paras = state.paragraphs.map(p => p.final.trim()).filter(Boolean);
+      const paras = state.paragraphs.map(p => (p.final || '').trim()).filter(Boolean);
       const fontClass = state.fontSize || 'text-base';
       const contentEl = document.getElementById('previewContent');
       contentEl.className = `p-6 sm:p-10 overflow-y-auto flex-1 dm-text text-stone-800 ${fontClass} leading-loose space-y-5 max-w-3xl mx-auto w-full`;
@@ -3270,7 +3296,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
 
     function getCompiledFinalText() {
       return state.paragraphs
-        .map(p => p.final.trim())
+        .map(p => (p.final || '').trim())
         .filter(t => t !== '')
         .join('\n\n');
     }
