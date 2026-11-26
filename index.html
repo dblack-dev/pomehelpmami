@@ -268,7 +268,10 @@
             </div>
 
             <div class="border-t border-amber-200/60 dark:border-slate-800 pt-2.5">
-              <span class="block text-[11px] font-bold dm-muted uppercase mb-1.5">🤖 สลับ Model:</span>
+              <div class="flex items-center justify-between gap-2 mb-1.5">
+                <span class="block text-[11px] font-bold dm-muted uppercase">🤖 สลับ Model:</span>
+                <button id="quickFetchModelsBtn" type="button" onclick="fetchLatestGeminiModels(false)" class="text-[11px] font-semibold text-purple-700 dark:text-purple-300 hover:underline">🔄 โหลดโมเดลล่าสุด</button>
+              </div>
               <div id="quickModelsList" class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto"></div>
             </div>
 
@@ -579,7 +582,10 @@
           </div>
 
           <div>
-            <span class="block text-[11px] font-bold dm-muted uppercase mb-1.5">⚡ โมเดลที่บันทึกไว้ (คลิกเพื่อสลับทันที):</span>
+            <div class="flex items-center justify-between gap-2 mb-1.5">
+              <span class="block text-[11px] font-bold dm-muted uppercase">⚡ โมเดลที่บันทึกไว้ (คลิกเพื่อสลับทันที):</span>
+              <button id="advFetchModelsBtn" type="button" onclick="fetchLatestGeminiModels(false)" class="text-xs px-2.5 py-1 bg-purple-100 hover:bg-purple-200 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200 font-semibold rounded-lg transition">🔄 โหลดโมเดลล่าสุด</button>
+            </div>
             <div id="savedModelsList" class="flex flex-wrap gap-1.5"></div>
           </div>
         </div>
@@ -716,6 +722,10 @@
         renderEmptyState();
       }
       checkPomeIncomingHandoff();
+      const pmSyncAt = Number(localStorage.getItem('pome_gemini_models_sync_at') || 0);
+      if ((state.advisor.provider || 'gemini') === 'gemini' && state.advisor.apiKey && (Date.now() - pmSyncAt) > 86400000) {
+        fetchLatestGeminiModels(true);
+      }
     });
 
     const onPomeFocusOrVisible = () => {
@@ -929,6 +939,9 @@
           `;
         }).join('');
       }
+
+      const quickFetchBtn = document.getElementById('quickFetchModelsBtn');
+      if (quickFetchBtn) quickFetchBtn.classList.toggle('hidden', (state.advisor.provider || 'gemini') !== 'gemini');
 
       if (state.savedModels.length === 0) {
         modelsList.innerHTML = `<p class="text-xs dm-muted text-stone-400">ยังไม่มีโมเดลที่บันทึกไว้</p>`;
@@ -2564,15 +2577,99 @@ ${contentBlock}
       if (provider === 'gemini') {
         urlWrap.classList.add('hidden');
         thinkingWrap.classList.remove('hidden');
+        document.getElementById('advFetchModelsBtn')?.classList.remove('hidden');
         hint.textContent = 'ขอรับ Gemini API Key ฟรีได้ที่ Google AI Studio (aistudio.google.com)';
         if (resetDefaults) modelInput.value = 'gemini-3-flash';
       } else {
         urlWrap.classList.remove('hidden');
         thinkingWrap.classList.add('hidden');
+        document.getElementById('advFetchModelsBtn')?.classList.add('hidden');
         hint.textContent = 'ใส่ OpenAI API Key หรือ OpenRouter Key ของคุณ';
         if (resetDefaults) modelInput.value = 'gpt-4o-mini';
       }
       renderSavedModels();
+    }
+
+    function parseGeminiVersionScore(id) {
+      const m = String(id || '').match(/gemini-(\d+(?:\.\d+)?)/i);
+      return m ? parseFloat(m[1]) : 0;
+    }
+
+    async function queryGeminiModelsList(apiKey) {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(apiKey)}`);
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data?.models)) return [];
+      const blocked = /(embedding|imagen|veo|tts|-image|aqa|robotics|native-audio|computer-use)/i;
+      const list = data.models
+        .filter(m => {
+          const id = String(m.name || '').replace(/^models\//, '');
+          const methods = Array.isArray(m.supportedGenerationMethods) ? m.supportedGenerationMethods : [];
+          return id.startsWith('gemini-') && !blocked.test(id) && methods.includes('generateContent');
+        })
+        .map(m => String(m.name || '').replace(/^models\//, ''));
+      return list.sort((a, b) => {
+        const diff = parseGeminiVersionScore(b) - parseGeminiVersionScore(a);
+        if (diff !== 0) return diff;
+        const scoreTier = (s) => (s.includes('flash') && !s.includes('lite') ? 3 : s.includes('pro') ? 2 : s.includes('flash-lite') ? 1 : 0);
+        return scoreTier(b) - scoreTier(a) || a.localeCompare(b);
+      });
+    }
+
+    let pomeFetchingModels = false;
+    async function fetchLatestGeminiModels(silent = false) {
+      if (pomeFetchingModels) return;
+      const modalOpen = !document.getElementById('advisorModal')?.classList.contains('hidden');
+      const modalProv = modalOpen ? document.getElementById('advProvider')?.value : (state.advisor.provider || 'gemini');
+      let key = '';
+      if (modalOpen && modalProv === 'gemini') {
+        key = document.getElementById('advApiKey')?.value.trim() || '';
+      }
+      if (!key) {
+        if ((state.advisor.provider || 'gemini') === 'gemini' && state.advisor.apiKey) key = state.advisor.apiKey.trim();
+        else key = (state.savedKeys.find(k => (k.provider || 'gemini') === 'gemini' && k.key)?.key || '').trim();
+      }
+      if (!key) {
+        if (!silent) showToast('กรุณาใส่ Gemini API Key ก่อนโหลดรายชื่อโมเดลครับ 🔑');
+        return;
+      }
+      pomeFetchingModels = true;
+      const btns = [document.getElementById('advFetchModelsBtn'), document.getElementById('quickFetchModelsBtn')].filter(Boolean);
+      btns.forEach(b => { b.disabled = true; b.classList.add('opacity-50'); });
+      try {
+        const live = await queryGeminiModelsList(key);
+        if (live.length === 0) {
+          if (!silent) showToast('ไม่พบโมเดลจาก Gemini API หรือ API Key ไม่ถูกต้องครับ');
+          return;
+        }
+        const merged = [];
+        live.forEach(m => { if (!merged.includes(m)) merged.push(m); });
+        (state.savedModels || []).forEach(m => { if (!merged.includes(m)) merged.push(m); });
+        state.savedModels = merged;
+        localStorage.setItem('pome_gemini_models_sync_at', String(Date.now()));
+        saveState();
+        renderSavedModels();
+        renderQuickSwitchMenu();
+        if (!silent) showToast(`อัปเดตรายชื่อโมเดล Gemini ล่าสุดแล้ว ${live.length} รุ่น 🤖`);
+      } catch (e) {
+        if (!silent) showToast('โหลดรายชื่อโมเดลไม่สำเร็จ: ' + (e?.message || e));
+      } finally {
+        pomeFetchingModels = false;
+        btns.forEach(b => { b.disabled = false; b.classList.remove('opacity-50'); });
+      }
+    }
+
+    async function pickFallbackGeminiModel(failedModel, apiKey) {
+      let pool = [];
+      try { pool = await queryGeminiModelsList(apiKey); } catch (_) {}
+      if (pool.length > 0) {
+        state.savedModels = [...new Set([...pool, ...(state.savedModels || [])])];
+        localStorage.setItem('pome_gemini_models_sync_at', String(Date.now()));
+      }
+      const candidates = [...new Set([...pool, ...(state.savedModels || [])])].filter(m => m && m !== failedModel);
+      return candidates.find(m => m.includes('flash') && !m.includes('lite'))
+        || candidates.find(m => m.includes('flash'))
+        || candidates[0]
+        || null;
     }
 
     function saveAdvisorSettings() {
@@ -2843,7 +2940,8 @@ ${prevAdvisorInfo}${nextPara}${historyText}
         const coreSafetySettings = fullSafetySettings.slice(0, 4);
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(state.advisor.apiKey)}`;
 
-        const sendGeminiReq = async (cfg, safetyList, includeSystemInstruction = true) => {
+        const sendGeminiReq = async (cfg, safetyList, includeSystemInstruction = true, targetModel = model) => {
+          const reqUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(targetModel)}:generateContent?key=${encodeURIComponent(state.advisor.apiKey)}`;
           const payload = {
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             generationConfig: cfg,
@@ -2852,7 +2950,7 @@ ${prevAdvisorInfo}${nextPara}${historyText}
           if (includeSystemInstruction) {
             payload.systemInstruction = { parts: [{ text: FICTION_SYSTEM_INSTRUCTION }] };
           }
-          const r = await fetch(url, {
+          const r = await fetch(reqUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -2861,17 +2959,36 @@ ${prevAdvisorInfo}${nextPara}${historyText}
           return { res: r, data: d };
         };
 
-        let { res, data } = await sendGeminiReq(genConfig, fullSafetySettings, true);
+        let activeModel = model;
+        let { res, data } = await sendGeminiReq(genConfig, fullSafetySettings, true, activeModel);
 
         // Auto-adapt สำหรับทุกรุ่น หากพารามิเตอร์ใดไม่ตรงกับรุ่นที่เรียกใช้
         if (!res.ok) {
           const errMsg = data.error?.message || '';
-          if (/thinking/i.test(errMsg) && genConfig.thinkingConfig) {
-            delete genConfig.thinkingConfig;
+          const isModelDead = res.status === 404 || (res.status === 400 && /not found|deprecated|no longer/i.test(errMsg));
+          if (isModelDead) {
+            const fb = await pickFallbackGeminiModel(activeModel, state.advisor.apiKey);
+            if (fb) {
+              activeModel = fb;
+              ({ res, data } = await sendGeminiReq(genConfig, fullSafetySettings, true, activeModel));
+            }
           }
-          const useCoreSafety = /safety|category|civic/i.test(errMsg);
-          const useSysInst = !/systemInstruction|system_instruction/i.test(errMsg);
-          ({ res, data } = await sendGeminiReq(genConfig, useCoreSafety ? coreSafetySettings : fullSafetySettings, useSysInst));
+          if (!res.ok) {
+            const retryErr = data.error?.message || '';
+            if (/thinking/i.test(retryErr) && genConfig.thinkingConfig) {
+              delete genConfig.thinkingConfig;
+            }
+            const useCoreSafety = /safety|category|civic/i.test(retryErr);
+            const useSysInst = !/systemInstruction|system_instruction/i.test(retryErr);
+            ({ res, data } = await sendGeminiReq(genConfig, useCoreSafety ? coreSafetySettings : fullSafetySettings, useSysInst, activeModel));
+          }
+        }
+        if (res.ok && activeModel !== model) {
+          state.advisor.model = activeModel;
+          saveState();
+          updateQuickSwitchLabel();
+          renderQuickSwitchMenu();
+          showToast(`โมเดลเดิมถูกปิดใช้งาน พี่ตูบสลับเป็น ${activeModel} ให้อัตโนมัติ 🔄`);
         }
 
         if (!res.ok) throw new Error(data.error?.message || 'เชื่อมต่อ Gemini ไม่สำเร็จ');
